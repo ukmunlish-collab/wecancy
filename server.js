@@ -58,7 +58,7 @@ app.post('/webhook', async (req, res) => {
       ? docs.map(d => d.content).join('\n\n')
       : 'No documents uploaded yet.';
 
-    const chatModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const prompt = 'You are a helpful business assistant.\n' +
       'Use the context below to answer the question as best you can.\n' +
       'If the answer is not in the context, say you do not have that info.\n\n' +
