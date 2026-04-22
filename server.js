@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const { processDocument } = require('./processor');
 
@@ -10,11 +9,54 @@ app.use(express.json());
 app.use(express.static('.'));
 const upload = multer({ storage: multer.memoryStorage() });
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
+
+async function askGemini(question, context) {
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' + process.env.GEMINI_API_KEY;
+  const body = {
+    contents: [{
+      parts: [{
+        text: 'You are a helpful business assistant.\n' +
+          'Use the context below to answer the question.\n' +
+          'If the answer is not in the context, say you do not have that info.\n\n' +
+          'Context:\n' + context + '\n\nQuestion: ' + question
+      }]
+    }]
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  console.log('Gemini raw response:', JSON.stringify(data).substring(0, 300));
+  if (data.error) throw new Error(data.error.message);
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not generate a response.';
+}
+
+async function sendWhatsApp(phone, message) {
+  const res = await fetch(
+    'https://graph.facebook.com/v18.0/' + process.env.WHATSAPP_PHONE_ID + '/messages',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + process.env.WHATSAPP_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: phone,
+        text: { body: message }
+      })
+    }
+  );
+  const data = await res.json();
+  console.log('WhatsApp result:', JSON.stringify(data));
+  return data;
+}
 
 app.post('/upload', upload.single('file'), async (req, res) => {
   try {
@@ -52,42 +94,19 @@ app.post('/webhook', async (req, res) => {
       .limit(10);
 
     if (dbError) console.error('Supabase error:', dbError);
-    console.log('Docs found:', docs?.length);
+    console.log('Docs found:', docs?.length || 0);
 
     const context = docs && docs.length > 0
       ? docs.map(d => d.content).join('\n\n')
-      : 'No documents uploaded yet.';
+      : 'No documents uploaded yet. Please ask the business owner to upload their documents.';
 
-    const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    const prompt = 'You are a helpful business assistant.\n' +
-      'Use the context below to answer the question as best you can.\n' +
-      'If the answer is not in the context, say you do not have that info.\n\n' +
-      'Context:\n' + context + '\n\nQuestion: ' + question;
+    const reply = await askGemini(question, context);
+    console.log('Reply:', reply.substring(0, 150));
 
-    const aiResult = await chatModel.generateContent(prompt);
-    const reply = aiResult.response.text();
-    console.log('Reply generated:', reply.substring(0, 100));
-
-    const waRes = await fetch(
-      'https://graph.facebook.com/v18.0/' + process.env.WHATSAPP_PHONE_ID + '/messages',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + process.env.WHATSAPP_TOKEN,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: phone,
-          text: { body: reply }
-        })
-      }
-    );
-    const waJson = await waRes.json();
-    console.log('WhatsApp result:', JSON.stringify(waJson));
+    await sendWhatsApp(phone, reply);
 
   } catch (err) {
-    console.error('Webhook error:', err);
+    console.error('Webhook error:', err.message);
   }
 });
 
