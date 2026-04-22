@@ -45,7 +45,7 @@ app.post('/webhook', async (req, res) => {
     const question = msg.text.body;
     const phone = msg.from;
 
-    const embedModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+    const embedModel = genAI.getGenerativeModel({ model: 'embedding-001' });
     const qEmbed = await embedModel.embedContent(question);
     const qVec = qEmbed.embedding.values;
 
