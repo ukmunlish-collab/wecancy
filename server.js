@@ -45,8 +45,10 @@ app.post('/webhook', async (req, res) => {
     const question = msg.text.body;
     const phone = msg.from;
 
-    const embedModel = genAI.getGenerativeModel({ model: 'embedding-001' });
-    const qEmbed = await embedModel.embedContent(question);
+    const qEmbed = await genAI.embedContent({
+      model: 'embedding-001',
+      content: { parts: [{ text: question }] }
+    });
     const qVec = qEmbed.embedding.values;
 
     const { data: docs } = await supabase.rpc('match_documents', {
