@@ -55,9 +55,8 @@ app.post('/webhook', async (req, res) => {
   const { data: docs } = await supabase.rpc(
     'match_documents', { query_embedding: qVec, match_count: 4 }
   );
-  const context = docs?.map(d => d.content).join('
+  const context = docs?.map(d => d.content).join('\n\n') || '';
 
-') || '';
 
   // 3. Ask Gemini with context
   const chat = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
