@@ -39,38 +39,34 @@ app.get('/webhook', (req, res) => {
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
   try {
-    console.log('Webhook hit:', JSON.stringify(req.body));
     const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    console.log('Message:', msg);
     if (!msg || msg.type !== 'text') return;
 
     const question = msg.text.body;
     const phone = msg.from;
     console.log('Question from', phone, ':', question);
 
-    const embedModel = genAI.getGenerativeModel({ model: 'models/text-embedding-004' });
-    const qEmbed = await embedModel.embedContent(question);
-    const qVec = qEmbed.embedding.values;
-    console.log('Embedding done, vector length:', qVec.length);
+    const { data: docs, error: dbError } = await supabase
+      .from('documents')
+      .select('content, filename')
+      .limit(10);
 
-    const { data: docs, error: dbError } = await supabase.rpc('match_documents', {
-      query_embedding: qVec,
-      match_count: 4
-    });
     if (dbError) console.error('Supabase error:', dbError);
     console.log('Docs found:', docs?.length);
 
-    const context = docs?.map(d => d.content).join('\n\n') || 'No documents uploaded yet.';
+    const context = docs && docs.length > 0
+      ? docs.map(d => d.content).join('\n\n')
+      : 'No documents uploaded yet.';
 
     const chatModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const prompt = 'You are a helpful business assistant.\n' +
-      'Use ONLY the context below to answer the question.\n' +
-      'If the answer is not in the context, say you do not have that info yet.\n\n' +
+      'Use the context below to answer the question as best you can.\n' +
+      'If the answer is not in the context, say you do not have that info.\n\n' +
       'Context:\n' + context + '\n\nQuestion: ' + question;
 
     const aiResult = await chatModel.generateContent(prompt);
     const reply = aiResult.response.text();
-    console.log('Reply:', reply);
+    console.log('Reply generated:', reply.substring(0, 100));
 
     const waRes = await fetch(
       'https://graph.facebook.com/v18.0/' + process.env.WHATSAPP_PHONE_ID + '/messages',
@@ -88,7 +84,7 @@ app.post('/webhook', async (req, res) => {
       }
     );
     const waJson = await waRes.json();
-    console.log('WhatsApp send result:', JSON.stringify(waJson));
+    console.log('WhatsApp result:', JSON.stringify(waJson));
 
   } catch (err) {
     console.error('Webhook error:', err);
