@@ -58,10 +58,8 @@ app.post('/webhook', async (req, res) => {
     console.log('[Webhook] Message received | type:', msg.type, '| from:', phone, '| text:', question);
 
     console.log('[Webhook] Calling embedding API...');
-    const qEmbed = await genAI.embedContent({
-      model: 'embedding-001',
-      content: { parts: [{ text: question }] }
-    });
+    const embedModel = genAI.getGenerativeModel({ model: 'embedding-001' });
+    const qEmbed = await embedModel.embedContent(question);
     const qVec = qEmbed.embedding.values;
     console.log('[Webhook] Embedding received, vector length:', qVec.length);
 
