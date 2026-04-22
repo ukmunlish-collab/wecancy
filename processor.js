@@ -1,12 +1,9 @@
-// processor.js
 require('dotenv').config();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const XLSX = require('xlsx');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
@@ -40,16 +37,13 @@ function chunkText(text, size = 500) {
 async function processDocument(buffer, filename, mimetype, businessId) {
   const text = await extractText(buffer, mimetype);
   const chunks = chunkText(text);
-  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
 
   for (const chunk of chunks) {
-    const result = await model.embedContent(chunk);
-    const embedding = result.embedding.values;
     await supabase.from('documents').insert({
       business_id: businessId,
       filename,
       content: chunk,
-      embedding
+      embedding: null
     });
   }
   return chunks.length;
