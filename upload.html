@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Business Document Upload</title>
+  <style>
+    body { font-family: sans-serif; max-width: 500px; margin: 60px auto; padding: 0 20px; }
+    h2 { font-size: 22px; margin-bottom: 8px; }
+    p { color: #666; font-size: 14px; margin-bottom: 24px; }
+    input, button { width: 100%; padding: 10px; margin-bottom: 12px; font-size: 14px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 6px; }
+    button { background: #0a7c3e; color: white; border: none; cursor: pointer; font-weight: 500; }
+    button:hover { background: #086432; }
+    #status { font-size: 14px; padding: 10px; border-radius: 6px; display: none; }
+    .success { background: #e6f4ea; color: #0a7c3e; }
+    .error { background: #fce8e6; color: #c5221f; }
+  </style>
+</head>
+<body>
+  <h2>Upload Business Documents</h2>
+  <p>Upload PDFs, Word docs, or Excel files. Your chatbot will use these to answer customer questions.</p>
+
+  <input type="text" id="businessId" placeholder="Business name (e.g. MyShop)" />
+  <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.txt" />
+  <button onclick="uploadFile()">Upload Document</button>
+  <div id="status"></div>
+
+  <script>
+    async function uploadFile() {
+      const businessId = document.getElementById('businessId').value.trim();
+      const file = document.getElementById('fileInput').files[0];
+      const status = document.getElementById('status');
+
+      if (!businessId || !file) {
+        status.className = 'error';
+        status.style.display = 'block';
+        status.textContent = 'Please enter a business name and select a file.';
+        return;
+      }
+
+      status.className = '';
+      status.style.display = 'block';
+      status.textContent = 'Uploading... please wait.';
+
+      const formData = new FormData();
+      formData.append('businessId', businessId);
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+          status.className = 'success';
+          status.textContent = 'Uploaded successfully! ' + data.chunks + ' chunks stored.';
+        } else {
+          throw new Error(data.error || 'Upload failed');
+        }
+      } catch (err) {
+        status.className = 'error';
+        status.textContent = 'Error: ' + err.message;
+      }
+    }
+  </script>
+</body>
+</html>
