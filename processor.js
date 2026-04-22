@@ -40,7 +40,7 @@ function chunkText(text, size = 500) {
 async function processDocument(buffer, filename, mimetype, businessId) {
   const text = await extractText(buffer, mimetype);
   const chunks = chunkText(text);
-  const model = genAI.getGenerativeModel({ model: 'embedding-001' });
+  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
 
   for (const chunk of chunks) {
     const result = await model.embedContent(chunk);
