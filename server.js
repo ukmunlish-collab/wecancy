@@ -29,32 +29,49 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 });
 
 app.get('/webhook', (req, res) => {
-  if (req.query['hub.verify_token'] === process.env.VERIFY_TOKEN) {
-    res.send(req.query['hub.challenge']);
+  const verifyToken = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  console.log('[Webhook] Verification request received');
+  console.log('[Webhook] verify_token:', verifyToken, '| challenge:', challenge);
+  if (verifyToken === process.env.VERIFY_TOKEN) {
+    console.log('[Webhook] Verification succeeded');
+    res.send(challenge);
   } else {
+    console.error('[Webhook] Verification failed — token mismatch (received:', verifyToken, ')');
     res.sendStatus(403);
   }
 });
 
+
 app.post('/webhook', async (req, res) => {
+  console.log('[Webhook] Incoming POST request body:', JSON.stringify(req.body, null, 2));
   res.sendStatus(200);
   try {
     const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    if (!msg || msg.type !== 'text') return;
+    if (!msg || msg.type !== 'text') {
+      console.log('[Webhook] No text message found in payload — skipping');
+      return;
+    }
 
     const question = msg.text.body;
     const phone = msg.from;
+    console.log('[Webhook] Message received | type:', msg.type, '| from:', phone, '| text:', question);
 
+    console.log('[Webhook] Calling embedding API...');
     const qEmbed = await genAI.embedContent({
       model: 'embedding-001',
       content: { parts: [{ text: question }] }
     });
     const qVec = qEmbed.embedding.values;
+    console.log('[Webhook] Embedding received, vector length:', qVec.length);
 
-    const { data: docs } = await supabase.rpc('match_documents', {
+    console.log('[Webhook] Calling Supabase match_documents RPC...');
+    const { data: docs, error: rpcError } = await supabase.rpc('match_documents', {
       query_embedding: qVec,
       match_count: 4
     });
+    if (rpcError) console.error('[Webhook] Supabase RPC error:', rpcError);
+    console.log('[Webhook] Supabase returned', docs?.length ?? 0, 'document(s)');
 
     const context = docs?.map(d => d.content).join('\n\n') || '';
 
@@ -64,10 +81,13 @@ app.post('/webhook', async (req, res) => {
       'If the answer is not in the context, say you do not have that info.\n\n' +
       'Context:\n' + context + '\n\nQuestion: ' + question;
 
+    console.log('[Webhook] Calling Gemini generateContent...');
     const result = await chatModel.generateContent(prompt);
     const reply = result.response.text();
+    console.log('[Webhook] Gemini reply:', reply);
 
-    await fetch(
+    console.log('[Webhook] Sending WhatsApp message to', phone, '...');
+    const waRes = await fetch(
       'https://graph.facebook.com/v18.0/' + process.env.WHATSAPP_PHONE_ID + '/messages',
       {
         method: 'POST',
@@ -82,9 +102,11 @@ app.post('/webhook', async (req, res) => {
         })
       }
     );
+    console.log('[Webhook] WhatsApp API response status:', waRes.status);
   } catch (err) {
     console.error('Webhook error:', err);
   }
 });
+
 
 app.listen(3000, () => console.log('Server running on port 3000'));
