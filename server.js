@@ -14,27 +14,32 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
-async function askGemini(question, context) {
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + process.env.GEMINI_API_KEY;
-  const body = {
-    contents: [{
-      parts: [{
-        text: 'You are a helpful business assistant.\n' +
-          'Use the context below to answer the question.\n' +
-          'If the answer is not in the context, say you do not have that info.\n\n' +
-          'Context:\n' + context + '\n\nQuestion: ' + question
-      }]
-    }]
-  };
-  const res = await fetch(url, {
+async function askGroq(question, context) {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    headers: {
+      'Authorization': 'Bearer ' + process.env.GROQ_API_KEY,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a helpful business assistant. Use ONLY the context provided to answer questions. If the answer is not in the context, say you do not have that info.'
+        },
+        {
+          role: 'user',
+          content: 'Context:\n' + context + '\n\nQuestion: ' + question
+        }
+      ],
+      max_tokens: 500
+    })
   });
   const data = await res.json();
-  console.log('Gemini raw response:', JSON.stringify(data).substring(0, 300));
+  console.log('Groq raw response:', JSON.stringify(data).substring(0, 300));
   if (data.error) throw new Error(data.error.message);
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not generate a response.';
+  return data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
 }
 
 async function sendWhatsApp(phone, message) {
@@ -100,7 +105,7 @@ app.post('/webhook', async (req, res) => {
       ? docs.map(d => d.content).join('\n\n')
       : 'No documents uploaded yet. Please ask the business owner to upload their documents.';
 
-    const reply = await askGemini(question, context);
+    const reply = await askGroq(question, context);
     console.log('Reply:', reply.substring(0, 150));
 
     await sendWhatsApp(phone, reply);
